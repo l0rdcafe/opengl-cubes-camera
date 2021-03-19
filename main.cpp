@@ -308,7 +308,9 @@ int main() {
     }
 
     // close img file
-	  stbi_image_free(img);
+    if (img != NULL) {
+	    stbi_image_free(img);
+    }
 
 		glBindTexture(GL_TEXTURE_2D, texture_id);
 
