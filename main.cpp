@@ -8,6 +8,9 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
 using namespace std;
 
 const unsigned int screen_width = 1200;
@@ -15,6 +18,7 @@ const unsigned int screen_height = 800;
 
 const GLuint n_vertices = 36;
 const int N_CUBES = 4;
+const int N_TEXTURES = 3;
 GLuint shader_id;
 GLFWwindow* window;
 GLuint VAO;
@@ -22,6 +26,7 @@ GLuint VBO;
 int selected_cube_idx = -1;
 bool is_scaling = false;
 bool is_centered = false;
+bool switch_texture = false;
 glm::vec3 cube_pos[N_CUBES] = {
   glm::vec3(-5.0f, 4.0f, -6.0f),
   glm::vec3(5.0f, 4.0f, -6.0f),
@@ -43,8 +48,13 @@ float last_x = (float)screen_width / 2.0;
 float last_y = (float)screen_height / 2.0;
 float fov = 45.0f;
 
-bool has_texture = false;
 GLuint texture_id;
+const char* texture_files[N_TEXTURES] = {
+  "assets/reverie.jpg",
+  "assets/mybox.png",
+  "assets/silk.jpg"
+};
+int texture_idx = 0;
 float cube_colors[N_CUBES][4] = {
   { 1.0f, 0.0f, 0.0f, 1.0f },
   { 0.0f, 1.0f, 0.0f, 1.0f },
@@ -79,11 +89,12 @@ void key_cb(GLFWwindow* windo, int key, int scancode, int action, int mods) {
   }
 
   if (key == GLFW_KEY_T && action == GLFW_PRESS) {
-    has_texture = true;
+    texture_idx = rand() % N_TEXTURES;
   }
 
   if (key == GLFW_KEY_Y && action == GLFW_PRESS) {
-    has_texture = false;
+    // reset to default
+    texture_idx = 0;
   }
 }
 
@@ -172,7 +183,7 @@ int main() {
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
 
-	window = glfwCreateWindow(screen_width, screen_height, "OpenGLAssignment1", NULL, NULL);
+	window = glfwCreateWindow(screen_width, screen_height, "OpenGLAssignment2", NULL, NULL);
 
 	if (window == NULL) {
 		fprintf(stderr, "Failed to open GLFW window\n");
@@ -235,11 +246,27 @@ int main() {
    0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
    -0.5f,  0.5f,  0.5f,  0.0f, 0.0f,
    -0.5f,  0.5f, -0.5f,  0.0f, 1.0f,
+
+   1.0f, 1.0f,
+   1.0f, 0.0f,
+   0.0f, 0.0f,
+   0.0f, 1.0f
 	};
 
 	glGenVertexArrays(1, &VAO);
 	// allocate buffer to draw triangle
 	glGenBuffers(1, &VBO);
+
+	// texture gen
+  glGenTextures(1, &texture_id);
+  glBindTexture(GL_TEXTURE_2D, texture_id);
+  // repeat img
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+  // set filtering
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
 
 	glBindVertexArray(VAO);
 	// attach buffer to graphics layer
@@ -247,22 +274,18 @@ int main() {
 	// now draw
 	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
+  // position vertices
   glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
   glEnableVertexAttribArray(0);
 
-	glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
+  // color vertices
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
 	glEnableVertexAttribArray(1);
 
-  glGenTextures(1, &texture_id);
-  glBindTexture(GL_TEXTURE_2D, texture_id);
+  // texture vertices
+	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
+	glEnableVertexAttribArray(2);
 
-  glEnableVertexAttribArray(glGetAttribLocation(ourShader.id, "uv_in"));
-
-  glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  glGenerateMipmap(GL_TEXTURE_2D);
-  glBindTexture(GL_TEXTURE_2D, 0);
-  glEnable(GL_TEXTURE_2D);
 	ourShader.use();
 
 	while (!glfwWindowShouldClose(window)) {
@@ -273,6 +296,21 @@ int main() {
 	  handle_input();
 
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    int img_width, img_height, nr_chans;
+    unsigned char* img = stbi_load(texture_files[texture_idx], &img_width, &img_height, &nr_chans, 0);
+      if (img != NULL) {
+      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, img_width, img_height, 0, GL_RGB, GL_UNSIGNED_BYTE, img);
+      glGenerateMipmap(GL_TEXTURE_2D);
+    } else {
+      cout << "Failed to load image " << texture_files[texture_idx] << endl;
+      exit(1);
+    }
+
+    // close img file
+	  stbi_image_free(img);
+
+		glBindTexture(GL_TEXTURE_2D, texture_id);
 
     glm::mat4 view = glm::lookAt(camera_pos, camera_pos + camera_front, camera_up);
     glm::mat4 projection = glm::mat4(1.0f);
@@ -303,10 +341,6 @@ int main() {
         cube_model = glm::translate(cube_model, cube_pos[i]);
         cube_model = glm::rotate(cube_model, glm::radians(45.0f), glm::vec3(1.0f, 0.0f, 0.0f));
       }
-
-        glActiveTexture(GL_TEXTURE0 + 0);
-        glBindTexture(GL_TEXTURE_2D, texture_id);
-        glUniform1i(glGetUniformLocation(ourShader.id, "tex"), 0);
 
       glUniformMatrix4fv(glGetUniformLocation(ourShader.id, "model"), 1, GL_FALSE, &cube_model[0][0]);
 		  glDrawArrays(GL_TRIANGLES, 0, n_vertices);
